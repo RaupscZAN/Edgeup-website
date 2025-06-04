@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Save, Upload, Trash } from 'lucide-react';
+import { Save, Upload, Trash, Image } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import AdminHeader from '../../components/admin/AdminHeader';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 
 const AdminSettings: React.FC = () => {
-  const { siteSettings, updateSiteSettings } = useCMS();
+  const { siteSettings, updateSiteSettings, media, addMedia } = useCMS();
   const [settings, setSettings] = useState(siteSettings);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [showLogoSelector, setShowLogoSelector] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -45,6 +46,50 @@ const AdminSettings: React.FC = () => {
     });
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    // Create a URL for the uploaded file (in a real app, you'd upload to a server)
+    const fileUrl = URL.createObjectURL(file);
+    
+    // Add to media library
+    const mediaItem = {
+      id: Date.now().toString(),
+      name: file.name,
+      type: 'image' as const,
+      url: fileUrl,
+      thumbnail: fileUrl,
+      size: file.size,
+      uploadedAt: new Date().toISOString()
+    };
+    
+    addMedia(mediaItem);
+    
+    // Set as logo
+    setSettings({
+      ...settings,
+      logo: fileUrl
+    });
+
+    // Reset file input
+    e.target.value = '';
+  };
+
+  const handleSelectFromMedia = (mediaUrl: string) => {
+    setSettings({
+      ...settings,
+      logo: mediaUrl
+    });
+    setShowLogoSelector(false);
+  };
+
   const handleSave = () => {
     setIsSaving(true);
     
@@ -60,6 +105,9 @@ const AdminSettings: React.FC = () => {
       }, 3000);
     }, 500);
   };
+
+  // Filter media to only show images
+  const imageMedia = media.filter(item => item.type === 'image');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -110,26 +158,45 @@ const AdminSettings: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Logo
                   </label>
-                  <div className="flex items-center">
-                    {settings.logo ? (
-                      <div className="flex items-center space-x-2">
-                        <img src={settings.logo} alt="Logo" className="h-10" />
+                  <div className="space-y-3">
+                    {settings.logo && (
+                      <div className="flex items-center space-x-3 p-3 border border-gray-200 rounded-md">
+                        <img src={settings.logo} alt="Current Logo" className="h-12 w-auto" />
+                        <div className="flex-1">
+                          <p className="text-sm text-gray-600">Current Logo</p>
+                        </div>
                         <button 
                           onClick={() => setSettings({...settings, logo: ''})}
                           className="text-red-600 hover:text-red-800"
+                          title="Remove logo"
                         >
                           <Trash size={16} />
                         </button>
                       </div>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                          <Upload size={16} className="mr-2" />
-                          Upload Logo
-                        </button>
-                        <span className="text-sm text-gray-500">No logo uploaded</span>
-                      </div>
                     )}
+                    
+                    <div className="flex space-x-2">
+                      <label className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 cursor-pointer">
+                        <Upload size={16} className="mr-2" />
+                        Upload New Logo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      
+                      {imageMedia.length > 0 && (
+                        <button
+                          onClick={() => setShowLogoSelector(true)}
+                          className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          <Image size={16} className="mr-2" />
+                          Choose from Media
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -285,6 +352,53 @@ const AdminSettings: React.FC = () => {
           </div>
         </main>
       </div>
+
+      {/* Media Selector Modal */}
+      {showLogoSelector && (
+        <div className="fixed inset-0 overflow-y-auto z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowLogoSelector(false)} />
+          <div className="relative bg-white rounded-lg max-w-4xl w-full mx-4 shadow-xl">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Choose Logo from Media Library</h3>
+                <button
+                  onClick={() => setShowLogoSelector(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
+                {imageMedia.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleSelectFromMedia(item.url)}
+                    className="border rounded-lg overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                  >
+                    <div className="h-24 bg-gray-100 flex items-center justify-center">
+                      <img
+                        src={item.url}
+                        alt={item.name}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="p-2">
+                      <p className="text-xs font-medium text-gray-900 truncate">{item.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {imageMedia.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  No images in media library. Upload some images first.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
